@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MongoDB Collection Viewer</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #eef2f7; color: #333; }
+        .container { max-width: 1100px; margin: 0 auto; padding: 30px 20px; }
+        h1 { text-align: center; color: #1a73e8; margin-bottom: 8px; font-size: 2rem; }
+        .subtitle { text-align: center; color: #555; margin-bottom: 24px; font-size: 0.95rem; }
+        .subtitle strong { color: #222; }
+
+        .form-row {
+            display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-bottom: 24px;
+        }
+        .form-row input, .form-row select {
+            padding: 10px 14px; border: 1px solid #ccc; border-radius: 24px;
+            font-size: 0.95rem; outline: none; transition: border 0.2s;
+        }
+        .form-row input:focus, .form-row select:focus { border-color: #1a73e8; }
+        #dbName { width: 240px; }
+        #collectionName { width: 240px; }
+        #limit { width: 80px; text-align: center; }
+        .btn {
+            padding: 10px 24px; background: #1a73e8; color: #fff; border: none;
+            border-radius: 24px; font-size: 0.95rem; cursor: pointer; transition: background 0.2s;
+        }
+        .btn:hover { background: #1558b0; }
+        .btn:disabled { background: #93b8e8; cursor: not-allowed; }
+
+        .status { text-align: center; margin-bottom: 16px; font-size: 0.9rem; color: #666; }
+        .status.error { color: #d93025; }
+        .status.success { color: #1e8e3e; }
+
+        .table-wrapper {
+            overflow-x: auto; background: #fff; border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        table {
+            width: 100%; border-collapse: collapse; font-size: 0.88rem;
+        }
+        th {
+            background: #1a73e8; color: #fff; padding: 12px 14px;
+            text-align: left; white-space: nowrap; position: sticky; top: 0;
+        }
+        td {
+            padding: 10px 14px; border-bottom: 1px solid #eee;
+            max-width: 350px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        tr:hover td { background: #f5f8ff; }
+        .no-data { text-align: center; padding: 40px; color: #999; }
+
+        .db-list { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-bottom: 20px; }
+        .db-chip {
+            padding: 6px 16px; background: #fff; border: 1px solid #ddd; border-radius: 20px;
+            cursor: pointer; font-size: 0.85rem; transition: all 0.2s;
+        }
+        .db-chip:hover { border-color: #1a73e8; color: #1a73e8; }
+        .db-chip.active { background: #1a73e8; color: #fff; border-color: #1a73e8; }
+
+        .coll-list { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-bottom: 20px; }
+        .coll-chip {
+            padding: 5px 14px; background: #fff; border: 1px solid #ddd; border-radius: 20px;
+            cursor: pointer; font-size: 0.83rem; transition: all 0.2s;
+        }
+        .coll-chip:hover { border-color: #1a73e8; color: #1a73e8; }
+        .coll-chip.active { background: #e8f0fe; color: #1a73e8; border-color: #1a73e8; }
+
+        .section-label { text-align: center; font-size: 0.85rem; color: #888; margin-bottom: 8px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>MongoDB Collection Viewer</h1>
+    <p class="subtitle">Data is loaded from your MongoDB cluster using <strong>MONGODB_URI</strong>.</p>
+
+    <!-- Database chips -->
+    <p class="section-label" id="dbLabel">Loading databases...</p>
+    <div class="db-list" id="dbList"></div>
+
+    <!-- Collection chips -->
+    <div id="collSection" style="display:none;">
+        <p class="section-label">Collections</p>
+        <div class="coll-list" id="collList"></div>
+    </div>
+
+    <!-- Manual input form -->
+    <div class="form-row">
+        <input type="text" id="dbName" placeholder="Database name">
+        <input type="text" id="collectionName" placeholder="Collection name (required)">
+        <input type="number" id="limit" value="20" min="1" max="200">
+        <button class="btn" id="loadBtn" onclick="loadData()">Load Data</button>
+    </div>
+
+    <p class="status" id="status"></p>
+
+    <div class="table-wrapper">
+        <div class="no-data" id="placeholder">Select a database and collection above, then click <strong>Load Data</strong>.</div>
+        <table id="resultTable" style="display:none;">
+            <thead><tr id="tableHead"></tr></thead>
+            <tbody id="tableBody"></tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    const API = '/api';
+
+    // Load databases on page load
+    window.addEventListener('DOMContentLoaded', loadDatabases);
+
+    async function loadDatabases() {
+        try {
+            const res = await fetch(`${API}/databases`);
+            const dbs = await res.json();
+            const el = document.getElementById('dbList');
+            el.innerHTML = '';
+            document.getElementById('dbLabel').textContent = 'Databases (click to select)';
+            dbs.filter(d => d !== 'admin' && d !== 'local').forEach(db => {
+                const chip = document.createElement('span');
+                chip.className = 'db-chip';
+                chip.textContent = db;
+                chip.onclick = () => selectDatabase(db);
+                el.appendChild(chip);
+            });
+            if (dbs.length === 0) {
+                document.getElementById('dbLabel').textContent = 'No databases found';
+            }
+        } catch (e) {
+            document.getElementById('dbLabel').textContent = 'Could not load databases';
+        }
+    }
+
+    async function selectDatabase(dbName) {
+        document.getElementById('dbName').value = dbName;
+        // highlight chip
+        document.querySelectorAll('.db-chip').forEach(c => c.classList.remove('active'));
+        event.target.classList.add('active');
+        // load collections
+        try {
+            const res = await fetch(`${API}/databases/${dbName}/collections`);
+            const colls = await res.json();
+            const section = document.getElementById('collSection');
+            const el = document.getElementById('collList');
+            el.innerHTML = '';
+            section.style.display = 'block';
+            colls.forEach(c => {
+                const chip = document.createElement('span');
+                chip.className = 'coll-chip';
+                chip.textContent = c;
+                chip.onclick = () => selectCollection(c);
+                el.appendChild(chip);
+            });
+            if (colls.length === 0) {
+                el.innerHTML = '<span style="color:#999">No collections in this database</span>';
+            }
+        } catch (e) {
+            document.getElementById('collList').innerHTML = '<span style="color:#d93025">Error loading collections</span>';
+        }
+    }
+
+    function selectCollection(collName) {
+        document.getElementById('collectionName').value = collName;
+        document.querySelectorAll('.coll-chip').forEach(c => c.classList.remove('active'));
+        event.target.classList.add('active');
+    }
+
+    async function loadData() {
+        const db = document.getElementById('dbName').value.trim();
+        const coll = document.getElementById('collectionName').value.trim();
+        const limit = document.getElementById('limit').value || 20;
+        const status = document.getElementById('status');
+        const btn = document.getElementById('loadBtn');
+
+        if (!coll) {
+            status.textContent = 'Please enter a collection name.';
+            status.className = 'status error';
+            return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = 'Loading...';
+        status.textContent = '';
+        status.className = 'status';
+
+        try {
+            const params = new URLSearchParams({ collection: coll, limit });
+            if (db) params.set('database', db);
+
+            const res = await fetch(`${API}/documents?${params}`);
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.error || `HTTP ${res.status}`);
+            }
+            const data = await res.json();
+            renderTable(data);
+            status.textContent = `Loaded ${data.length} document(s) from ${db || '(default)'}/${coll}`;
+            status.className = 'status success';
+        } catch (e) {
+            status.textContent = `Error: ${e.message}`;
+            status.className = 'status error';
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Load Data';
+        }
+    }
+
+    function renderTable(data) {
+        const table = document.getElementById('resultTable');
+        const placeholder = document.getElementById('placeholder');
+        const head = document.getElementById('tableHead');
+        const body = document.getElementById('tableBody');
+
+        if (!data || data.length === 0) {
+            table.style.display = 'none';
+            placeholder.style.display = 'block';
+            placeholder.textContent = 'No documents found in this collection.';
+            return;
+        }
+
+        // Collect all keys
+        const keys = new Set();
+        data.forEach(doc => Object.keys(doc).forEach(k => keys.add(k)));
+        const columns = [...keys];
+
+        // Render header
+        head.innerHTML = columns.map(k => `<th>${escapeHtml(k)}</th>`).join('');
+
+        // Render rows
+        body.innerHTML = data.map(doc =>
+            '<tr>' + columns.map(k => {
+                let val = doc[k];
+                if (val !== null && typeof val === 'object') val = JSON.stringify(val);
+                return `<td title="${escapeHtml(String(val ?? ''))}">${escapeHtml(String(val ?? ''))}</td>`;
+            }).join('') + '</tr>'
+        ).join('');
+
+        placeholder.style.display = 'none';
+        table.style.display = 'table';
+    }
+
+    function escapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
+</script>
+</body>
+</html>
