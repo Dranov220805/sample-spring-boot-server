@@ -14,4 +14,4 @@ MONGODB_URI=your_mongodb_connection_string_here
 logging.level.root=INFO
 
 ## How to run
-```mvn clean spring-boot:run
+mvn clean spring-boot:run
