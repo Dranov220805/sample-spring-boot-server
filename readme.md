@@ -1,6 +1,6 @@
 # Sample Spring Boot Server (DevOps Testing)
 
-This repository contains a lightweight Java Spring Boot application designed specifically for testing DevOps workflows. It is ideal for validating CI/CD pipelines, containerization strategies, and server deployments (such as AWS EC2 configurations).
+This repository contains a lightweight Java Spring Boot application designed specifically for testing DevOps workflows. It is ideal for validating CI/CD pipelines, containerization strategies, and server deployments (such as AWS EC2 configurations). Require jdk 17
 
 ## Configuration
 
