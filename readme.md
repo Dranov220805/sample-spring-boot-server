@@ -17,3 +17,4 @@ logging.level.root=INFO
 
 ```
 mvn clean spring-boot:run
+```
